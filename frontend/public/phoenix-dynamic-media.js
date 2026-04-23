@@ -389,10 +389,11 @@
     return image;
   }
 
-  function makePlayer({ id, list, nodes, dots, onChange }) {
+  function makePlayer({ id, list, nodes, dots, onChange, autoplay = true }) {
     let current = 0;
     let imageTimer = null;
     let fallbackTimer = null;
+    let enabled = Boolean(autoplay);
 
     function clearTimers() {
       if (imageTimer) window.clearTimeout(imageTimer);
@@ -402,11 +403,15 @@
     }
 
     function playVideo(video) {
+      if (!enabled) return;
+      video.preload = "auto";
       video.currentTime = 0;
       const playPromise = video.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
-          fallbackTimer = window.setTimeout(() => activate(randomNext(list, current, id)), 1800);
+          if (enabled) {
+            fallbackTimer = window.setTimeout(() => activate(randomNext(list, current, id)), 1800);
+          }
         });
       }
     }
@@ -415,7 +420,11 @@
       clearTimers();
       if (!nodes.length) return;
       current = ((next % nodes.length) + nodes.length) % nodes.length;
-      activeSources.set(id, list[current].source);
+      if (enabled) {
+        activeSources.set(id, list[current].source);
+      } else {
+        activeSources.delete(id);
+      }
 
       nodes.forEach((node, index) => {
         const active = index === current;
@@ -428,6 +437,7 @@
           try { video.currentTime = 0; } catch {}
           return;
         }
+        if (!enabled) return;
         video.onended = () => activate(randomNext(list, current, id));
         playVideo(video);
       });
@@ -437,12 +447,31 @@
       }
       if (typeof onChange === "function") onChange(current);
 
-      if (list[current].kind !== "video") {
+      if (enabled && list[current].kind !== "video") {
         imageTimer = window.setTimeout(() => activate(randomNext(list, current, id)), IMAGE_INTERVAL_MS);
       }
     }
 
-    return { activate };
+    function setEnabled(nextEnabled) {
+      const normalized = Boolean(nextEnabled);
+      if (enabled === normalized) return;
+      enabled = normalized;
+      if (enabled) {
+        activate(current);
+        return;
+      }
+
+      clearTimers();
+      activeSources.delete(id);
+      nodes.forEach((node) => {
+        const video = node.tagName === "VIDEO" ? node : node.querySelector("video");
+        if (!video) return;
+        video.onended = null;
+        video.pause();
+      });
+    }
+
+    return { activate, setEnabled };
   }
 
   function mountHero(list) {
@@ -499,8 +528,23 @@
     host.appendChild(veil);
     section.insertBefore(host, section.firstElementChild);
 
-    const player = makePlayer({ id, list, nodes });
+    const player = makePlayer({ id, list, nodes, autoplay: false });
     player.activate(0);
+
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          player.setEnabled(entry.isIntersecting && entry.intersectionRatio > 0.08);
+        });
+      }, {
+        root: null,
+        rootMargin: "180px 0px 180px 0px",
+        threshold: [0, 0.08, 0.18, 0.35]
+      });
+      observer.observe(section);
+    } else {
+      player.setEnabled(true);
+    }
   }
 
   async function boot() {
