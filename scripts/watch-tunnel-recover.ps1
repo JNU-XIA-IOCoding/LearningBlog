@@ -21,8 +21,16 @@ function LogLine([string]$line) {
 function IsOk([string]$url) {
   if ([string]::IsNullOrWhiteSpace($url)) { return $false }
   try {
-    $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 15
-    return $r.StatusCode -ge 200 -and $r.StatusCode -lt 500
+    $checks = @(
+      $url.TrimEnd('/'),
+      ($url.TrimEnd('/') + '/phoenix-dynamic-media.js'),
+      ($url.TrimEnd('/') + '/wallpapers/sections.json')
+    )
+    foreach ($checkUrl in $checks) {
+      $r = Invoke-WebRequest -UseBasicParsing -Uri $checkUrl -TimeoutSec 15
+      if ($r.StatusCode -lt 200 -or $r.StatusCode -ge 400) { return $false }
+    }
+    return $true
   } catch {
     return $false
   }

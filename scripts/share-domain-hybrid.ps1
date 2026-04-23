@@ -18,7 +18,7 @@ $activeFile = Join-Path $opsDir 'active-share-url.txt'
 function Test-Url([string]$url) {
   try {
     $resp = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 20
-    return $resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500
+    return $resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400
   } catch {
     return $false
   }
