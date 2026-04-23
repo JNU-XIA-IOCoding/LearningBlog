@@ -1,0 +1,14 @@
+node_modules
+backend/node_modules
+frontend/node_modules
+frontend/dist
+.env
+backend/.env
+frontend/.env
+ops/*.log
+ops/*.pid
+ops/*.err.log
+ops/*.out.log
+ops/active-share-url.txt
+*.corrupted-*.html
+*.fullscreen-experiment-*.js

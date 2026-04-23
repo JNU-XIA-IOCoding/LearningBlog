@@ -1,0 +1,603 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Phoenix 后台控制台</title>
+  <style>
+    :root {
+      --bg: #faf7f2;
+      --panel: #fffaf5;
+      --line: #e8d7c9;
+      --text: #2c1810;
+      --muted: #7a5c4a;
+      --accent: #c97b7b;
+      --accent-2: #e8a0a0;
+      --ok: #3a8a55;
+      --warn: #9a6f1a;
+      --danger: #b64b4b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Serif SC", Georgia, serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #f8e8dc 0%, var(--bg) 38%, var(--bg) 100%);
+    }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 8px; font-weight: 500; }
+    .muted { color: var(--muted); }
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: linear-gradient(180deg, #f9d8d8, #f2bcbc); }
+    .btn.danger { border-color: #e5aaaa; color: var(--danger); }
+    .status {
+      margin: 10px 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+    .card {
+      grid-column: span 12;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 16px rgba(44,24,16,.05);
+    }
+    .card h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, select, textarea {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+      font-family: inherit;
+    }
+    input, select { height: 36px; }
+    textarea { min-height: 64px; width: 100%; resize: vertical; }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid #f0e4da;
+      text-align: left;
+      padding: 8px 6px;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; }
+    .metrics { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 10px; }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 10px;
+    }
+    .metric .k { font-size: 12px; color: var(--muted); }
+    .metric .v { font-size: 22px; margin-top: 2px; }
+    .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .zone {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      background: #fffdfb;
+      min-height: 210px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    .zone h3 { margin: 0 0 8px; font-size: 14px; }
+    .pick { display: flex; gap: 6px; align-items: center; margin: 4px 0; font-size: 12px; }
+    .pill { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .dangerTxt { color: var(--danger); }
+    @media (max-width: 980px) {
+      .metrics { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .zones { grid-template-columns: 1fr; }
+      .topbar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Phoenix 后台控制台</h1>
+    <div class="muted">用于管理用户、文章、媒体资源、站点配置和分区壁纸。保存后前台刷新即可生效。</div>
+
+    <div class="topbar">
+      <div class="row" id="loginRow">
+        <input id="u" placeholder="管理员账号" value="admin" />
+        <input id="p" placeholder="密码" type="password" />
+        <button class="btn primary" id="loginBtn">登录</button>
+        <button class="btn" id="logoutBtn">退出</button>
+      </div>
+      <div class="row">
+        <a class="btn" id="openSiteLink" href="/" target="_blank">打开前台</a>
+        <button class="btn" id="refreshBtn">刷新数据</button>
+      </div>
+      <span class="pill" id="who">未登录</span>
+    </div>
+
+    <div class="status" id="status">就绪。</div>
+
+    <div class="grid">
+      <section class="card" id="overviewCard">
+        <h2>总览</h2>
+        <div class="metrics" id="metrics"></div>
+      </section>
+
+      <section class="card">
+        <h2>用户管理</h2>
+        <table>
+          <thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>操作</th></tr></thead>
+          <tbody id="usersTbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>文章管理</h2>
+        <table>
+          <thead><tr><th>ID</th><th>标题</th><th>作者</th><th>状态</th><th>点赞</th><th>操作</th></tr></thead>
+          <tbody id="postsTbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>媒体资源</h2>
+        <div class="row" style="margin-bottom:8px">
+          <input id="mediaFile" type="file" accept="image/*,video/*" multiple />
+          <button class="btn primary" id="uploadMediaBtn">批量上传媒体</button>
+        </div>
+        <table>
+          <thead><tr><th>ID</th><th>文件名</th><th>类型</th><th>大小</th><th>链接</th></tr></thead>
+          <tbody id="mediaTbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>快捷入口配置</h2>
+        <div class="row" style="margin-bottom:10px">
+          <input id="quick-hero-title" placeholder="首页主标题" style="min-width:260px" />
+          <input id="quick-hero-subtitle" placeholder="首页副标题" style="min-width:260px" />
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <input id="quick-github" placeholder="GitHub 链接" style="min-width:260px" />
+          <input id="quick-email" placeholder="邮箱 / mailto 链接" style="min-width:260px" />
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <input id="quick-bilibili" placeholder="Bilibili 链接" style="min-width:260px" />
+          <input id="quick-csdn" placeholder="CSDN 链接" style="min-width:260px" />
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <textarea id="quick-bio-1" placeholder="个人介绍第一段"></textarea>
+        </div>
+        <div class="row" style="margin-bottom:10px">
+          <textarea id="quick-bio-2" placeholder="个人介绍第二段"></textarea>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="saveQuickConfigBtn">保存快捷配置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>站点配置</h2>
+        <table>
+          <thead><tr><th>键</th><th>值</th><th>操作</th></tr></thead>
+          <tbody id="settingsTbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>分区壁纸配置</h2>
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn" id="videoFillBtn">所有分区填充视频</button>
+          <button class="btn" id="clearZonesBtn">清空分区选择</button>
+          <button class="btn primary" id="saveZonesBtn">保存分区配置</button>
+        </div>
+        <div class="zones" id="zones"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN_KEY = 'pblog_token';
+    const APP_BASE = location.protocol === 'file:' ? 'http://127.0.0.1:5173' : location.origin;
+    const zones = ['hero', 'about', 'learning', 'ai', 'journal', 'roadmap'];
+    const state = {
+      apiBase: null,
+      me: null,
+      media: [],
+      settingsMap: {},
+      picks: { hero: new Set(), about: new Set(), learning: new Set(), ai: new Set(), journal: new Set(), roadmap: new Set() },
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(msg, type = 'ok') {
+      const cls = type === 'error' ? 'dangerTxt' : type === 'warn' ? 'warn' : 'ok';
+      $('status').innerHTML = `<span class="${cls}">${msg}</span>`;
+    }
+
+    async function resolveBase() {
+      if (state.apiBase) return state.apiBase;
+      const cands = [
+        `${APP_BASE}/api`,
+        'http://127.0.0.1:3001/api',
+        `${location.protocol}//${location.hostname}:3001/api`,
+        'http://localhost:3001/api'
+      ];
+      for (const c of cands) {
+        try {
+          const r = await fetch(`${c}/health`, { cache: 'no-store' });
+          if (r.ok) { state.apiBase = c; return c; }
+        } catch {}
+      }
+      throw new Error('后端 API 不可用');
+    }
+
+    async function api(path, init = {}) {
+      const base = await resolveBase();
+      const token = localStorage.getItem(TOKEN_KEY) || '';
+      const headers = new Headers(init.headers || {});
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
+      const r = await fetch(`${base}${path}`, { ...init, headers, credentials: 'include' });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        throw new Error(`${r.status} ${t || r.statusText}`);
+      }
+      const ct = r.headers.get('content-type') || '';
+      return ct.includes('application/json') ? r.json() : r.text();
+    }
+
+    async function login() {
+      try {
+        const data = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username: $('u').value.trim(), password: $('p').value })
+        });
+        if (!data?.token) throw new Error('未获取到登录令牌');
+        localStorage.setItem(TOKEN_KEY, data.token);
+        state.me = data.user;
+        $('who').textContent = `${data.user.username} (${data.user.role})`;
+        setStatus('登录成功，正在加载后台数据...');
+        await refreshAll();
+      } catch (e) {
+        setStatus(`登录失败：${e.message}`, 'error');
+      }
+    }
+
+    async function localAdminLogin() {
+      try {
+        const data = await api('/auth/local-admin', { method: 'POST' });
+        if (!data?.token) throw new Error('未获取到本地管理令牌');
+        localStorage.setItem(TOKEN_KEY, data.token);
+        state.me = data.user;
+        $('who').textContent = `${data.user.username} (${data.user.role})`;
+        setStatus('已进入本地管理员模式，正在加载后台数据...');
+        await refreshAll();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function ensureAdmin() {
+      const me = await api('/auth/me');
+      state.me = me;
+      $('who').textContent = `${me.username} (${me.role})`;
+      if (me.role !== 'admin') throw new Error('当前账号不是管理员');
+    }
+
+    function fmtSize(n) {
+      if (!n) return '0';
+      if (n > 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+      return `${Math.round(n / 1024)} KB`;
+    }
+
+    async function loadOverview() {
+      const x = await api('/admin/overview');
+      const metrics = [
+        ['用户数', x.users],
+        ['文章数', x.posts],
+        ['任务数', x.tasks],
+        ['媒体数', x.media],
+        ['近7天访问', x.visitors_7d]
+      ];
+      $('metrics').innerHTML = metrics.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    }
+
+    async function loadUsers() {
+      const rows = await api('/admin/users');
+      $('usersTbody').innerHTML = rows.map((u) => `
+        <tr>
+          <td>${u.id}</td>
+          <td>${u.username}</td>
+          <td>${u.email}</td>
+          <td>
+            <select id="role-${u.id}">
+              <option value="user" ${u.role === 'user' ? 'selected' : ''}>user</option>
+              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+            </select>
+          </td>
+          <td><button class="btn" onclick="window.saveUserRole(${u.id})">保存</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadPosts() {
+      const rows = await api('/admin/posts');
+      $('postsTbody').innerHTML = rows.map((p) => `
+        <tr>
+          <td>${p.id}</td>
+          <td>${p.title}</td>
+          <td>${p.username}</td>
+          <td>
+            <select id="post-status-${p.id}">
+              <option value="published" ${p.status === 'published' ? 'selected' : ''}>published</option>
+              <option value="draft" ${p.status === 'draft' ? 'selected' : ''}>draft</option>
+            </select>
+          </td>
+          <td>${p.likes_count || 0}</td>
+          <td class="row">
+            <button class="btn" onclick="window.savePostStatus(${p.id})">更新状态</button>
+            <button class="btn danger" onclick="window.delPost(${p.id})">删除</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadMedia() {
+      const rows = await api('/admin/media');
+      $('mediaTbody').innerHTML = rows.map((m) => `
+        <tr>
+          <td>${m.id}</td>
+          <td>${m.file_name}</td>
+          <td>${m.kind}</td>
+          <td>${fmtSize(m.size_bytes)}</td>
+          <td><a href="${m.file_url}" target="_blank">打开</a></td>
+        </tr>
+      `).join('');
+    }
+
+    async function uploadMedia() {
+      const input = $('mediaFile');
+      const files = Array.from(input?.files || []);
+      if (!files.length) throw new Error('请先选择媒体文件');
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fd = new FormData();
+        fd.append('file', file);
+        setStatus(`正在上传 ${i + 1} / ${files.length}：${file.name}`, 'warn');
+        await api('/upload', { method: 'POST', body: fd });
+      }
+      input.value = '';
+      await Promise.all([loadMedia(), loadWallpaperData()]);
+      setStatus(`媒体上传完成，共 ${files.length} 个文件。`);
+    }
+
+    async function loadSettings() {
+      const rows = await api('/admin/site-settings');
+      state.settingsMap = Object.fromEntries(rows.map((s) => [s.key, s.value || '']));
+      $('settingsTbody').innerHTML = rows.map((s) => `
+        <tr>
+          <td>${s.key}</td>
+          <td><textarea id="setting-${s.key}">${s.value || ''}</textarea></td>
+          <td><button class="btn" onclick="window.saveSetting('${s.key}')">保存</button></td>
+        </tr>
+      `).join('');
+      fillQuickConfig();
+    }
+
+    function fillQuickConfig() {
+      $('quick-hero-title').value = state.settingsMap.hero_title || '';
+      $('quick-hero-subtitle').value = state.settingsMap.hero_subtitle || '';
+      $('quick-github').value = state.settingsMap.social_github || '';
+      $('quick-email').value = state.settingsMap.social_email || '';
+      $('quick-bilibili').value = state.settingsMap.social_bilibili || '';
+      $('quick-csdn').value = state.settingsMap.social_csdn || '';
+      $('quick-bio-1').value = state.settingsMap.profile_bio_1 || '';
+      $('quick-bio-2').value = state.settingsMap.profile_bio_2 || '';
+    }
+
+    async function saveQuickConfig() {
+      const entries = [
+        ['hero_title', $('quick-hero-title').value],
+        ['hero_subtitle', $('quick-hero-subtitle').value],
+        ['social_github', $('quick-github').value],
+        ['social_email', $('quick-email').value],
+        ['social_bilibili', $('quick-bilibili').value],
+        ['social_csdn', $('quick-csdn').value],
+        ['profile_bio_1', $('quick-bio-1').value],
+        ['profile_bio_2', $('quick-bio-2').value],
+      ];
+
+      for (const [key, value] of entries) {
+        await api('/admin/site-settings', {
+          method: 'PUT',
+          body: JSON.stringify({ key, value })
+        });
+      }
+
+      await loadSettings();
+      setStatus('快捷入口配置已保存。刷新前台即可看到链接与文案更新。');
+    }
+
+    async function loadWallpaperData() {
+      const [manifestResp, mediaRows] = await Promise.all([
+        fetch(`${APP_BASE}/wallpapers/manifest.json`, { cache: 'no-store' }),
+        api('/admin/media').catch(() => [])
+      ]);
+
+      const manifestList = manifestResp.ok ? await manifestResp.json() : [];
+      const uploadedList = (mediaRows || [])
+        .filter((m) => m?.file_url)
+        .map((m) => ({
+          name: m.file_name || `media-${m.id}`,
+          kind: m.kind || (String(m.mime_type || '').startsWith('video/') ? 'video' : 'image'),
+          path: String(m.file_url)
+        }));
+
+      const merged = [...(Array.isArray(manifestList) ? manifestList : []), ...uploadedList];
+      const byPath = new Map();
+      merged.forEach((m) => {
+        const path = String(m?.path || '').trim();
+        if (!path) return;
+        if (!byPath.has(path)) byPath.set(path, m);
+      });
+      state.media = Array.from(byPath.values());
+
+      let pick = null;
+      try { pick = await api('/admin/wallpapers/selection'); } catch {}
+      if (!pick) {
+        const p2 = await api('/wallpapers');
+        pick = p2.selection || {};
+      }
+
+      zones.forEach((z) => {
+        state.picks[z] = new Set((pick[z] || []).map(String));
+      });
+      renderZones();
+    }
+
+    function renderZones() {
+      const files = state.media;
+      $('zones').innerHTML = zones.map((z) => {
+        const list = files.map((m, i) => {
+          const id = `${z}-${i}`;
+          const checked = state.picks[z].has(m.path) ? 'checked' : '';
+          const mark = m.kind === 'video' ? 'VIDEO' : 'IMAGE';
+          return `<label class="pick"><input type="checkbox" id="${id}" data-zone="${z}" data-path="${m.path}" ${checked}/> <span class="pill">${mark}</span> <span title="${m.path}">${m.name || m.path}</span></label>`;
+        }).join('');
+        return `<div class="zone"><h3>${z}</h3>${list || '<div class="muted">暂无可用文件</div>'}</div>`;
+      }).join('');
+
+      $('zones').querySelectorAll('input[type="checkbox"]').forEach((el) => {
+        el.addEventListener('change', (ev) => {
+          const z = ev.target.dataset.zone;
+          const path = ev.target.dataset.path;
+          if (ev.target.checked) state.picks[z].add(path);
+          else state.picks[z].delete(path);
+        });
+      });
+    }
+
+    async function saveZoneSelection() {
+      const payload = {};
+      zones.forEach((z) => payload[z] = Array.from(state.picks[z] || []));
+      await api('/admin/wallpapers/selection', { method: 'PUT', body: JSON.stringify(payload) });
+      setStatus('分区壁纸选择已保存。刷新前台后生效。');
+    }
+
+    window.saveUserRole = async (id) => {
+      try {
+        const role = $(`role-${id}`).value;
+        await api(`/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
+        setStatus(`用户 ${id} 角色已更新为 ${role}。`);
+      } catch (e) { setStatus(`角色更新失败：${e.message}`, 'error'); }
+    };
+
+    window.savePostStatus = async (id) => {
+      try {
+        const status = $(`post-status-${id}`).value;
+        await api(`/admin/posts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+        setStatus(`文章 ${id} 状态已更新。`);
+      } catch (e) { setStatus(`状态更新失败：${e.message}`, 'error'); }
+    };
+
+    window.delPost = async (id) => {
+      if (!confirm(`确认删除文章 ${id} 吗？`)) return;
+      try {
+        await api(`/admin/posts/${id}`, { method: 'DELETE' });
+        await loadPosts();
+        setStatus(`文章 ${id} 已删除。`);
+      } catch (e) { setStatus(`删除失败：${e.message}`, 'error'); }
+    };
+
+    window.saveSetting = async (key) => {
+      try {
+        const value = $(`setting-${key}`).value;
+        await api('/admin/site-settings', { method: 'PUT', body: JSON.stringify({ key, value }) });
+        setStatus(`配置 ${key} 已保存。`);
+      } catch (e) { setStatus(`配置保存失败：${e.message}`, 'error'); }
+    };
+
+    async function refreshAll() {
+      try {
+        await ensureAdmin();
+        await Promise.all([
+          loadOverview(),
+          loadUsers(),
+          loadPosts(),
+          loadMedia(),
+          loadSettings(),
+          loadWallpaperData(),
+        ]);
+        setStatus('后台数据刷新完成。');
+      } catch (e) {
+        setStatus(`刷新失败：${e.message}`, 'error');
+      }
+    }
+
+    $('loginBtn').addEventListener('click', login);
+    $('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem(TOKEN_KEY);
+      state.me = null;
+      $('who').textContent = '未登录';
+      setStatus('已退出登录。', 'warn');
+    });
+    $('refreshBtn').addEventListener('click', refreshAll);
+    $('saveZonesBtn').addEventListener('click', () => saveZoneSelection().catch((e) => setStatus(e.message, 'error')));
+    $('uploadMediaBtn').addEventListener('click', () => uploadMedia().catch((e) => setStatus(e.message, 'error')));
+    $('saveQuickConfigBtn').addEventListener('click', () => saveQuickConfig().catch((e) => setStatus(e.message, 'error')));
+    $('clearZonesBtn').addEventListener('click', () => {
+      zones.forEach((z) => state.picks[z] = new Set());
+      renderZones();
+    });
+    $('videoFillBtn').addEventListener('click', () => {
+      const videos = state.media.filter((m) => m.kind === 'video').map((m) => m.path);
+      zones.forEach((z, idx) => {
+        const pick = videos.length ? [videos[idx % videos.length], videos[(idx + 1) % videos.length], videos[(idx + 2) % videos.length]] : [];
+        state.picks[z] = new Set(pick);
+      });
+      renderZones();
+      setStatus('已按视频自动填充分区，请点击“保存分区配置”。', 'warn');
+    });
+
+    (async () => {
+      $('openSiteLink').href = APP_BASE;
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token) {
+        setStatus('检测到登录状态，正在加载后台数据...');
+        await refreshAll();
+      } else {
+        await localAdminLogin();
+      }
+    })();
+  </script>
+</body>
+</html>

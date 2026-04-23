@@ -1,0 +1,80 @@
+{
+    "hero":  [
+                 "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+                 "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+                 "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+                 "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+                 "/wallpapers/红薯.mp4",
+                 "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG",
+                 "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG",
+                 "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG",
+                 "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG",
+                 "/wallpapers/Estelle (30).JPG",
+                 "/wallpapers/Estelle (32).JPG"
+             ],
+    "about":  [
+                  "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+                  "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+                  "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+                  "/wallpapers/红薯.mp4",
+                  "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+                  "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG",
+                  "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG",
+                  "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG",
+                  "/wallpapers/Estelle (30).JPG",
+                  "/wallpapers/Estelle (32).JPG",
+                  "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG"
+              ],
+    "learning":  [
+                     "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+                     "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+                     "/wallpapers/红薯.mp4",
+                     "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+                     "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+                     "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG",
+                     "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG",
+                     "/wallpapers/Estelle (30).JPG",
+                     "/wallpapers/Estelle (32).JPG",
+                     "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG",
+                     "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG"
+                 ],
+    "ai":  [
+               "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+               "/wallpapers/红薯.mp4",
+               "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+               "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+               "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+               "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG",
+               "/wallpapers/Estelle (30).JPG",
+               "/wallpapers/Estelle (32).JPG",
+               "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG",
+               "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG",
+               "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG"
+           ],
+    "journal":  [
+                    "/wallpapers/红薯.mp4",
+                    "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+                    "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+                    "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+                    "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+                    "/wallpapers/Estelle (30).JPG",
+                    "/wallpapers/Estelle (32).JPG",
+                    "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG",
+                    "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG",
+                    "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG",
+                    "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG"
+                ],
+    "roadmap":  [
+                    "/wallpapers/06a95efa16b3c7a2144958aa77eeb26f.mp4",
+                    "/wallpapers/6d1079e1274fa8b41225ffbb91703f71.mp4",
+                    "/wallpapers/d49c0b735a18b411d68b1e29f3f8f99f.mp4",
+                    "/wallpapers/dc49684de1c2a6ca90aa584d97c8710f.mp4",
+                    "/wallpapers/红薯.mp4",
+                    "/wallpapers/Estelle (32).JPG",
+                    "/wallpapers/2026_03_23_23_58_20_IMG_6225.JPG",
+                    "/wallpapers/2026_03_23_23_58_26_IMG_6226.JPG",
+                    "/wallpapers/2026_03_23_23_58_30_IMG_6229.JPG",
+                    "/wallpapers/2026_03_23_23_58_44_IMG_6234.JPG",
+                    "/wallpapers/Estelle (30).JPG"
+                ]
+}

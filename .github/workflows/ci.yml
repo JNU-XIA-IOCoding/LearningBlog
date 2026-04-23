@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend Install
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend Typecheck
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: Frontend Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend Build
+        working-directory: frontend
+        run: npm run build

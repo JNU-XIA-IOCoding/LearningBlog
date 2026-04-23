@@ -1,0 +1,18 @@
+{
+  "name": "Phoenix Learning Journey",
+  "short_name": "PhoenixBlog",
+  "description": "Personal full-stack learning blog with admin panel and AI agent resources.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7ede7",
+  "theme_color": "#a64f3f",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
