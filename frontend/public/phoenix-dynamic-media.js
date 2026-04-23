@@ -16,6 +16,8 @@
     ? ["http://127.0.0.1:3001/api"]
     : [`${window.location.origin}/api`, "http://127.0.0.1:3001/api"];
   const IMAGE_INTERVAL_MS = 11000;
+  const SECTION_START_STAGGER_MS = 750;
+  const VIDEO_FAILURE_SKIP_MS = 1800;
   const activeSources = new Map();
 
   function injectStyles() {
@@ -401,13 +403,22 @@
       fallbackTimer = null;
     }
 
+    function scheduleNext(delay = VIDEO_FAILURE_SKIP_MS) {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      fallbackTimer = window.setTimeout(() => activate(randomNext(list, current, id)), delay);
+    }
+
+    function clearFallback() {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+
     function playVideo(video) {
+      try { video.load(); } catch {}
       video.currentTime = 0;
       const playPromise = video.play();
       if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {
-          fallbackTimer = window.setTimeout(() => activate(randomNext(list, current, id)), 1800);
-        });
+        playPromise.catch(() => scheduleNext());
       }
     }
 
@@ -423,12 +434,18 @@
         const video = node.tagName === "VIDEO" ? node : node.querySelector("video");
         if (!video) return;
         video.onended = null;
+        video.onerror = null;
+        video.onstalled = null;
+        video.onplaying = null;
         video.pause();
         if (!active) {
           try { video.currentTime = 0; } catch {}
           return;
         }
         video.onended = () => activate(randomNext(list, current, id));
+        video.onerror = () => scheduleNext(600);
+        video.onstalled = () => scheduleNext(3200);
+        video.onplaying = clearFallback;
         playVideo(video);
       });
 
@@ -481,7 +498,7 @@
     player.activate(0);
   }
 
-  function mountSection(id, list) {
+  function mountSection(id, list, order = 0) {
     const section = document.getElementById(id);
     if (!section || !list.length) return;
     section.querySelectorAll(":scope > .phoenix-section-media").forEach((node) => node.remove());
@@ -500,7 +517,7 @@
     section.insertBefore(host, section.firstElementChild);
 
     const player = makePlayer({ id, list, nodes });
-    player.activate(0);
+    window.setTimeout(() => player.activate(0), order * SECTION_START_STAGGER_MS);
   }
 
   async function boot() {
@@ -509,7 +526,7 @@
     mountHero(config.hero || []);
     SECTION_MAP
       .filter((item) => item.type === "section")
-      .forEach((item) => mountSection(item.id, config[item.key] || config.hero || []));
+      .forEach((item, index) => mountSection(item.id, config[item.key] || config.hero || [], index + 1));
   }
 
   function ready() {
