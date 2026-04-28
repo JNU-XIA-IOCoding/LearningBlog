@@ -176,6 +176,37 @@
       </section>
 
       <section class="card">
+        <h2>学习资源管理</h2>
+        <div class="row" style="margin-bottom:8px">
+          <input id="lrTitle" placeholder="资源标题" style="min-width:220px" />
+          <input id="lrUrl" placeholder="外部链接，可选" style="min-width:260px" />
+          <select id="lrDay">
+            <option value="">不绑定天数</option>
+            <option value="1">Day 1</option><option value="2">Day 2</option><option value="3">Day 3</option><option value="4">Day 4</option>
+            <option value="5">Day 5</option><option value="6">Day 6</option><option value="7">Day 7</option><option value="8">Day 8</option>
+            <option value="9">Day 9</option><option value="10">Day 10</option><option value="11">Day 11</option><option value="12">Day 12</option>
+            <option value="13">Day 13</option><option value="14">Day 14</option>
+          </select>
+          <select id="lrDifficulty">
+            <option value="beginner">beginner</option>
+            <option value="intermediate">intermediate</option>
+            <option value="advanced">advanced</option>
+          </select>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <input id="lrTopic" placeholder="topic，如 agents/rag/backend" />
+          <input id="lrTags" placeholder="标签，逗号分隔" />
+          <input id="lrFile" type="file" />
+          <button class="btn primary" id="uploadLearningResourceBtn">上传学习资源</button>
+        </div>
+        <textarea id="lrDesc" placeholder="资源说明：为什么值得学、怎么使用"></textarea>
+        <table>
+          <thead><tr><th>ID</th><th>标题</th><th>天数</th><th>主题</th><th>类型</th><th>操作</th></tr></thead>
+          <tbody id="learningResourcesTbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
         <h2>快捷入口配置</h2>
         <div class="row" style="margin-bottom:10px">
           <input id="quick-hero-title" placeholder="首页主标题" style="min-width:260px" />
@@ -228,6 +259,7 @@
       apiBase: null,
       me: null,
       media: [],
+      learningResources: [],
       settingsMap: {},
       picks: { hero: new Set(), about: new Set(), learning: new Set(), ai: new Set(), journal: new Set(), roadmap: new Set() },
     };
@@ -325,6 +357,7 @@
         ['文章数', x.posts],
         ['任务数', x.tasks],
         ['媒体数', x.media],
+        ['学习资源', x.learning_resources || 0],
         ['近7天访问', x.visitors_7d]
       ];
       $('metrics').innerHTML = metrics.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
@@ -398,6 +431,48 @@
       input.value = '';
       await Promise.all([loadMedia(), loadWallpaperData()]);
       setStatus(`媒体上传完成，共 ${files.length} 个文件。`);
+    }
+
+    async function loadLearningResources() {
+      const data = await api('/learning/resources');
+      const rows = data.items || [];
+      state.learningResources = rows;
+      $('learningResourcesTbody').innerHTML = rows.map((item) => {
+        const href = item.file_url || item.url || '#';
+        return `
+          <tr>
+            <td>${item.id}</td>
+            <td><a href="${href}" target="_blank">${item.title}</a></td>
+            <td>${item.day_number || '-'}</td>
+            <td>${item.topic || 'general'}</td>
+            <td>${item.kind || 'link'}</td>
+            <td><button class="btn danger" onclick="window.delLearningResource(${item.id})">删除</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function uploadLearningResource() {
+      const title = $('lrTitle').value.trim();
+      const url = $('lrUrl').value.trim();
+      const file = $('lrFile').files?.[0];
+      if (!title) throw new Error('请填写资源标题');
+      if (!url && !file) throw new Error('请提供链接或选择文件');
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('url', url);
+      fd.append('description', $('lrDesc').value.trim());
+      fd.append('topic', $('lrTopic').value.trim() || 'general');
+      fd.append('difficulty', $('lrDifficulty').value || 'beginner');
+      fd.append('tags', $('lrTags').value.trim());
+      if ($('lrDay').value) fd.append('day_number', $('lrDay').value);
+      if (file) fd.append('file', file);
+      await api('/admin/learning/resources', { method: 'POST', body: fd });
+      ['lrTitle', 'lrUrl', 'lrDesc', 'lrTopic', 'lrTags'].forEach((id) => $(id).value = '');
+      $('lrDay').value = '';
+      $('lrFile').value = '';
+      await Promise.all([loadLearningResources(), loadOverview()]);
+      setStatus('学习资源已上传，并会在前台学习仪表盘中出现。');
     }
 
     async function loadSettings() {
@@ -538,6 +613,15 @@
       } catch (e) { setStatus(`删除失败：${e.message}`, 'error'); }
     };
 
+    window.delLearningResource = async (id) => {
+      if (!confirm(`确认删除学习资源 ${id} 吗？`)) return;
+      try {
+        await api(`/admin/learning/resources/${id}`, { method: 'DELETE' });
+        await Promise.all([loadLearningResources(), loadOverview()]);
+        setStatus(`学习资源 ${id} 已删除。`);
+      } catch (e) { setStatus(`删除失败：${e.message}`, 'error'); }
+    };
+
     window.saveSetting = async (key) => {
       try {
         const value = $(`setting-${key}`).value;
@@ -554,6 +638,7 @@
           loadUsers(),
           loadPosts(),
           loadMedia(),
+          loadLearningResources(),
           loadSettings(),
           loadWallpaperData(),
         ]);
@@ -573,6 +658,7 @@
     $('refreshBtn').addEventListener('click', refreshAll);
     $('saveZonesBtn').addEventListener('click', () => saveZoneSelection().catch((e) => setStatus(e.message, 'error')));
     $('uploadMediaBtn').addEventListener('click', () => uploadMedia().catch((e) => setStatus(e.message, 'error')));
+    $('uploadLearningResourceBtn').addEventListener('click', () => uploadLearningResource().catch((e) => setStatus(e.message, 'error')));
     $('saveQuickConfigBtn').addEventListener('click', () => saveQuickConfig().catch((e) => setStatus(e.message, 'error')));
     $('clearZonesBtn').addEventListener('click', () => {
       zones.forEach((z) => state.picks[z] = new Set());

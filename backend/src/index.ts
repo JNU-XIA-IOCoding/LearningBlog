@@ -92,11 +92,18 @@ const upload = multer({
       cb(null, `${stamp}${ext}`);
     }
   }),
-  limits: { fileSize: 30 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowed = file.mimetype.startsWith("image/") || file.mimetype.startsWith("video/");
+    const allowed =
+      file.mimetype.startsWith("image/") ||
+      file.mimetype.startsWith("video/") ||
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/zip" ||
+      file.mimetype === "application/x-zip-compressed" ||
+      file.mimetype.startsWith("text/") ||
+      /\.(md|markdown|pdf|zip|txt|csv|json)$/i.test(file.originalname);
     if (!allowed) {
-      cb(new Error("Only image/video are allowed"));
+      cb(new Error("Only learning-friendly media or document files are allowed"));
       return;
     }
     cb(null, true);
@@ -176,6 +183,21 @@ function mapUser(row: any): SafeUser {
 function hashIp(ip: string | undefined) {
   if (!ip) return "";
   return createHash("sha256").update(ip).digest("hex");
+}
+
+function localDateKey(offsetDays = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+async function getAdminUserId() {
+  const admin = await pool.query("SELECT id FROM users WHERE username='admin' ORDER BY id ASC LIMIT 1");
+  if (!admin.rowCount) return null;
+  return Number(admin.rows[0].id);
 }
 
 app.use((req, _res, next) => {
@@ -540,7 +562,7 @@ app.delete("/api/tasks/:id", auth, async (req: AuthRequest, res) => {
 });
 
 app.post("/api/checkin", auth, async (req: AuthRequest, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   const found = await pool.query("SELECT id FROM checkins WHERE user_id=$1 AND check_date=$2", [req.user!.id, today]);
   if (found.rowCount) {
     res.status(409).json({ error: "Already checked in today" });
@@ -551,7 +573,7 @@ app.post("/api/checkin", auth, async (req: AuthRequest, res) => {
 
   const user = await pool.query("SELECT streak,last_checkin FROM users WHERE id=$1", [req.user!.id]);
   const row = user.rows[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yesterday = localDateKey(-1);
   const nextStreak = row.last_checkin === yesterday ? Number(row.streak || 0) + 1 : 1;
 
   await pool.query("UPDATE users SET streak=$1,last_checkin=$2 WHERE id=$3", [nextStreak, today, req.user!.id]);
@@ -804,6 +826,334 @@ app.get("/api/sessions/stats", auth, async (req: AuthRequest, res) => {
   res.json(stats.rows[0]);
 });
 
+function resourceKindFromUpload(file?: Express.Multer.File, fallback = "link") {
+  if (!file) return fallback;
+  if (file.mimetype.startsWith("video/")) return "video";
+  if (file.mimetype.startsWith("image/")) return "image";
+  if (file.mimetype === "application/pdf") return "pdf";
+  if (/\.md|\.markdown$/i.test(file.originalname)) return "markdown";
+  return "file";
+}
+
+async function listLearningResources(req: express.Request) {
+  const search = (req.query.search as string | undefined)?.trim();
+  const topic = (req.query.topic as string | undefined)?.trim();
+  const day = Number(req.query.day || 0);
+  const where: string[] = ["1=1"];
+  const params: Array<string | number> = [];
+  let idx = 1;
+
+  if (search) {
+    where.push(`(title ILIKE $${idx} OR description ILIKE $${idx} OR $${idx} = ANY(tags))`);
+    params.push(`%${search}%`);
+    idx++;
+  }
+  if (topic && topic !== "all") {
+    where.push(`topic = $${idx++}`);
+    params.push(topic);
+  }
+  if (day >= 1 && day <= 14) {
+    where.push(`day_number = $${idx++}`);
+    params.push(day);
+  }
+
+  return await pool.query(
+    `SELECT *
+     FROM learning_resources
+     WHERE ${where.join(" AND ")}
+     ORDER BY COALESCE(day_number, 99), created_at DESC, id DESC
+     LIMIT 240`,
+    params
+  );
+}
+
+app.get("/api/learning/resources", async (req, res) => {
+  const result = await listLearningResources(req);
+  res.json({ items: result.rows });
+});
+
+app.post("/api/local/learning/resources", upload.single("file"), async (req: AuthRequest, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local resource upload is owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+
+  const schema = z.object({
+    title: z.string().min(1).max(220),
+    url: z.string().url().optional().or(z.literal("")),
+    description: z.string().max(2000).optional(),
+    topic: z.string().max(80).optional(),
+    difficulty: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+    tags: z.string().max(500).optional(),
+    day_number: z.coerce.number().int().min(1).max(14).optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload" });
+    return;
+  }
+
+  const fileUrl = req.file ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}` : null;
+  if (!fileUrl && !parsed.data.url) {
+    res.status(400).json({ error: "Provide a link or upload a file" });
+    return;
+  }
+  const tags = (parsed.data.tags || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const created = await pool.query(
+    `INSERT INTO learning_resources
+       (title, kind, url, file_url, description, topic, difficulty, tags, day_number, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING *`,
+    [
+      parsed.data.title,
+      resourceKindFromUpload(req.file, parsed.data.url ? "link" : "file"),
+      parsed.data.url || null,
+      fileUrl,
+      parsed.data.description || "",
+      parsed.data.topic || "general",
+      parsed.data.difficulty || "beginner",
+      tags,
+      parsed.data.day_number || null,
+      adminId
+    ]
+  );
+  res.status(201).json(created.rows[0]);
+});
+
+app.post("/api/admin/learning/resources", auth, adminOnly, upload.single("file"), async (req: AuthRequest, res) => {
+  const schema = z.object({
+    title: z.string().min(1).max(220),
+    url: z.string().url().optional().or(z.literal("")),
+    description: z.string().max(2000).optional(),
+    topic: z.string().max(80).optional(),
+    difficulty: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+    tags: z.string().max(500).optional(),
+    day_number: z.coerce.number().int().min(1).max(14).optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload" });
+    return;
+  }
+  const fileUrl = req.file ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}` : null;
+  const tags = (parsed.data.tags || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const created = await pool.query(
+    `INSERT INTO learning_resources
+       (title, kind, url, file_url, description, topic, difficulty, tags, day_number, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING *`,
+    [
+      parsed.data.title,
+      resourceKindFromUpload(req.file, parsed.data.url ? "link" : "file"),
+      parsed.data.url || null,
+      fileUrl,
+      parsed.data.description || "",
+      parsed.data.topic || "general",
+      parsed.data.difficulty || "beginner",
+      tags,
+      parsed.data.day_number || null,
+      req.user!.id
+    ]
+  );
+  res.status(201).json(created.rows[0]);
+});
+
+app.delete("/api/admin/learning/resources/:id", auth, adminOnly, async (req, res) => {
+  const deleted = await pool.query("DELETE FROM learning_resources WHERE id=$1 RETURNING id", [Number(req.params.id)]);
+  if (!deleted.rowCount) {
+    res.status(404).json({ error: "Resource not found" });
+    return;
+  }
+  res.json({ deleted: true });
+});
+
+app.get("/api/learning/plan", async (_req, res) => {
+  const result = await pool.query("SELECT * FROM study_plan_days ORDER BY day_number ASC");
+  res.json({ days: result.rows });
+});
+
+app.get("/api/learning/dashboard", async (_req, res) => {
+  const [plan, resources] = await Promise.all([
+    pool.query("SELECT * FROM study_plan_days ORDER BY day_number ASC"),
+    pool.query("SELECT * FROM learning_resources ORDER BY COALESCE(day_number, 99), created_at DESC LIMIT 240")
+  ]);
+  res.json({
+    plan: plan.rows,
+    progress: [],
+    resources: resources.rows,
+    tasks: [],
+    checkins: [],
+    posts: [],
+    readonly: true,
+    summary: {
+      done_days: 0,
+      total_days: plan.rows.length,
+      resources: resources.rows.length,
+      open_tasks: 0,
+      completed_tasks: 0,
+      streak: 0,
+      last_checkin: null
+    }
+  });
+});
+
+app.get("/api/local/learning/dashboard", async (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local dashboard is owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+  const [plan, progress, resources, tasks, checkins, posts, user] = await Promise.all([
+    pool.query("SELECT * FROM study_plan_days ORDER BY day_number ASC"),
+    pool.query("SELECT * FROM study_day_progress WHERE user_id=$1 ORDER BY day_number ASC", [adminId]),
+    pool.query("SELECT * FROM learning_resources ORDER BY COALESCE(day_number, 99), created_at DESC LIMIT 240"),
+    pool.query("SELECT * FROM tasks WHERE user_id=$1 ORDER BY done ASC, created_at DESC LIMIT 80", [adminId]),
+    pool.query("SELECT check_date FROM checkins WHERE user_id=$1 ORDER BY check_date DESC LIMIT 60", [adminId]),
+    pool.query("SELECT id,title,category,tags,created_at,summary FROM posts WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20", [adminId]),
+    pool.query("SELECT streak,last_checkin FROM users WHERE id=$1", [adminId])
+  ]);
+
+  const doneDays = new Set(progress.rows.filter((x) => x.status === "done").map((x) => Number(x.day_number)));
+  res.json({
+    plan: plan.rows,
+    progress: progress.rows,
+    resources: resources.rows,
+    tasks: tasks.rows,
+    checkins: checkins.rows.map((x) => x.check_date),
+    posts: posts.rows,
+    summary: {
+      done_days: doneDays.size,
+      total_days: plan.rows.length,
+      resources: resources.rows.length,
+      open_tasks: tasks.rows.filter((x) => !x.done).length,
+      completed_tasks: tasks.rows.filter((x) => x.done).length,
+      streak: user.rows[0]?.streak || 0,
+      last_checkin: user.rows[0]?.last_checkin || null
+    }
+  });
+});
+
+app.put("/api/local/learning/progress/:day", async (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local progress updates are owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+  const day = Number(req.params.day);
+  const schema = z.object({
+    status: z.enum(["todo", "active", "done"]),
+    notes: z.string().max(4000).optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success || day < 1 || day > 14) {
+    res.status(400).json({ error: "Invalid payload" });
+    return;
+  }
+
+  const updated = await pool.query(
+    `INSERT INTO study_day_progress(user_id, day_number, status, notes, completed_at, updated_at)
+     VALUES ($1,$2,$3,$4,CASE WHEN $3='done' THEN NOW() ELSE NULL END,NOW())
+     ON CONFLICT(user_id, day_number)
+     DO UPDATE SET status=EXCLUDED.status,
+                   notes=EXCLUDED.notes,
+                   completed_at=CASE WHEN EXCLUDED.status='done' THEN COALESCE(study_day_progress.completed_at, NOW()) ELSE NULL END,
+                   updated_at=NOW()
+     RETURNING *`,
+    [adminId, day, parsed.data.status, parsed.data.notes || ""]
+  );
+  res.json(updated.rows[0]);
+});
+
+app.post("/api/local/checkin", async (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local check-in is owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+  const today = localDateKey();
+  const found = await pool.query("SELECT id FROM checkins WHERE user_id=$1 AND check_date=$2", [adminId, today]);
+  if (!found.rowCount) {
+    await pool.query("INSERT INTO checkins (user_id,check_date) VALUES ($1,$2)", [adminId, today]);
+    const user = await pool.query("SELECT streak,last_checkin FROM users WHERE id=$1", [adminId]);
+    const yesterday = localDateKey(-1);
+    const nextStreak = user.rows[0]?.last_checkin === yesterday ? Number(user.rows[0]?.streak || 0) + 1 : 1;
+    await pool.query("UPDATE users SET streak=$1,last_checkin=$2 WHERE id=$3", [nextStreak, today, adminId]);
+  }
+  const updated = await pool.query("SELECT streak,last_checkin FROM users WHERE id=$1", [adminId]);
+  res.json({ check_date: today, streak: updated.rows[0]?.streak || 0, last_checkin: updated.rows[0]?.last_checkin });
+});
+
+app.post("/api/local/tasks", async (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local tasks are owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+  const schema = z.object({ text: z.string().min(1).max(300), priority: z.enum(["high", "mid", "low"]).optional() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload" });
+    return;
+  }
+  const created = await pool.query(
+    "INSERT INTO tasks (user_id,text,priority) VALUES ($1,$2,$3) RETURNING *",
+    [adminId, parsed.data.text, parsed.data.priority || "mid"]
+  );
+  res.status(201).json(created.rows[0]);
+});
+
+app.put("/api/local/tasks/:id", async (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ error: "Local tasks are owner-only" });
+    return;
+  }
+  const adminId = await getAdminUserId();
+  if (!adminId) {
+    res.status(404).json({ error: "Admin user not found" });
+    return;
+  }
+  const schema = z.object({ done: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid payload" });
+    return;
+  }
+  const updated = await pool.query(
+    "UPDATE tasks SET done=$1 WHERE id=$2 AND user_id=$3 RETURNING *",
+    [parsed.data.done, Number(req.params.id), adminId]
+  );
+  if (!updated.rowCount) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
+  res.json(updated.rows[0]);
+});
+
 app.get("/api/roadmap/templates", (_req, res) => {
   res.json([
     {
@@ -840,25 +1190,28 @@ app.get("/api/roadmap/templates", (_req, res) => {
 });
 
 app.get("/api/stats", async (_req, res) => {
-  const [posts, users, resources] = await Promise.all([
+  const [posts, users, resources, learningResources] = await Promise.all([
     pool.query("SELECT COUNT(*)::int AS count FROM posts"),
     pool.query("SELECT COUNT(*)::int AS count FROM users"),
-    pool.query("SELECT COUNT(*)::int AS count FROM ai_resources")
+    pool.query("SELECT COUNT(*)::int AS count FROM ai_resources"),
+    pool.query("SELECT COUNT(*)::int AS count FROM learning_resources")
   ]);
   res.json({
     total_posts: posts.rows[0].count,
     total_users: users.rows[0].count,
-    total_ai_resources: resources.rows[0].count
+    total_ai_resources: resources.rows[0].count,
+    total_learning_resources: learningResources.rows[0].count
   });
 });
 
 app.get("/api/admin/overview", auth, adminOnly, async (_req, res) => {
-  const [users, posts, tasks, media, visitors] = await Promise.all([
+  const [users, posts, tasks, media, visitors, learningResources] = await Promise.all([
     pool.query("SELECT COUNT(*)::int AS count FROM users"),
     pool.query("SELECT COUNT(*)::int AS count FROM posts"),
     pool.query("SELECT COUNT(*)::int AS count FROM tasks"),
     pool.query("SELECT COUNT(*)::int AS count FROM media_assets"),
-    pool.query("SELECT COUNT(*)::int AS count FROM visitor_logs WHERE created_at >= NOW() - INTERVAL '7 days'")
+    pool.query("SELECT COUNT(*)::int AS count FROM visitor_logs WHERE created_at >= NOW() - INTERVAL '7 days'"),
+    pool.query("SELECT COUNT(*)::int AS count FROM learning_resources")
   ]);
 
   res.json({
@@ -866,7 +1219,8 @@ app.get("/api/admin/overview", auth, adminOnly, async (_req, res) => {
     posts: posts.rows[0].count,
     tasks: tasks.rows[0].count,
     media: media.rows[0].count,
-    visitors_7d: visitors.rows[0].count
+    visitors_7d: visitors.rows[0].count,
+    learning_resources: learningResources.rows[0].count
   });
 });
 

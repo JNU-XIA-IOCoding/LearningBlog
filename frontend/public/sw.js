@@ -1,4 +1,4 @@
-const CACHE = "phoenix-blog-v1";
+const CACHE = "phoenix-blog-v2-learning-ecosystem";
 const ASSETS = ["/", "/manifest.webmanifest", "/icons/app-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -17,6 +17,16 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/uploads/") ||
+    url.pathname.startsWith("/wallpapers/") ||
+    url.pathname.includes("phoenix-")
+  ) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;

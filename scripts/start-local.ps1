@@ -8,6 +8,7 @@ $frontendPath = Join-Path $root "frontend"
 $backendJob = Start-Job -ArgumentList $backendPath -ScriptBlock {
   param($path)
   Set-Location $path
+  npm run migrate
   npm run start
 }
 

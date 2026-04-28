@@ -50,7 +50,7 @@ if ($needsRestore) {
 }
 
 $html = [System.IO.File]::ReadAllText($target, [System.Text.Encoding]::UTF8)
-$requiredLoaders = @('phoenix-dynamic-media.js', 'phoenix-backend-bridge.js')
+$requiredLoaders = @('phoenix-dynamic-media.js', 'phoenix-backend-bridge.js', 'phoenix-learning-ecosystem.js')
 $missingLoaders = @($requiredLoaders | Where-Object { !$html.Contains($_) })
 if ($missingLoaders.Count -gt 0) {
   $loaderList = ($missingLoaders | ForEach-Object { "'/$_'" }) -join ', '
